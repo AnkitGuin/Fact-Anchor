@@ -1,0 +1,51 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+env/
+
+# --- Tests / caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Secrets (never commit) ---
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.netrc
+
+# --- Data & artifacts: raw data and run outputs are not versioned ---
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/README.md
+!data/processed/.gitkeep
+!data/processed/dev_smoke.jsonl
+artifacts/runs/
+artifacts/generations/*
+!artifacts/generations/.gitkeep
+artifacts/metrics/*
+!artifacts/metrics/.gitkeep
+artifacts/plots/*
+!artifacts/plots/.gitkeep
+artifacts/logs/*
+!artifacts/logs/.gitkeep
+.cache/
+*.cache.json
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

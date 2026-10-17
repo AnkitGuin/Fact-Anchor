@@ -1,0 +1,41 @@
+# ===========================================================================
+# Condition 1 + 2 of Section 11.5: base model, NO retrieved context, baseline
+# decoding.  Everything related to retrieval/corruption/contrast is disabled so
+# that no network call and no second forward pass happens.
+#
+#   python scripts/run_baseline.py --config configs/baseline.yaml \
+#       --prompt "Who was Marie Curie?"
+# ===========================================================================
+defaults: default.yaml    # informational only; `--config` takes one file
+
+run:
+  name: baseline
+  seed: 42
+  device: auto
+  dtype: auto
+
+model:
+  model_id: HuggingFaceTB/SmolLM2-135M-Instruct
+  use_chat_template: true
+
+decoding:
+  mode: baseline
+  alpha: 0.0
+  max_new_tokens: 64
+  do_sample: false
+  temperature: 0.7
+  top_p: 0.9
+
+retrieval:
+  enabled: false
+
+corruption:
+  strategy: none
+  corruption_rate: 0.0
+
+context:
+  trusted_facts_in_base: false
+
+evaluation:
+  max_examples: 50
+  claim_judge: heuristic_lexical

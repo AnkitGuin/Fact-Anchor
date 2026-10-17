@@ -1,0 +1,153 @@
+# ===========================================================================
+# FactAnchor default configuration
+# ---------------------------------------------------------------------------
+# Every field maps 1:1 onto `factanchor.config.Config` (pydantic model).
+# Unknown keys raise a validation error (nothing is silently ignored).
+# CLI flags override values here; `--override key.path=value` overrides nested
+# fields (see `factanchor.cli`).
+#
+# NOTE ON THE MODEL: the proposal targets Llama-3-8B-Instruct.  That checkpoint
+# is gated (license acceptance), needs ~16 GB of RAM/VRAM in bf16 and is *not*
+# downloaded automatically.  The default below is a small, openly available
+# stand-in used for development.  Results obtained with a stand-in model MUST
+# be reported as such (see README "Model choice").
+# ===========================================================================
+
+run:
+  name: default
+  seed: 42
+  output_dir: artifacts
+  run_id: null                 # null -> auto-generated timestamp+slug id
+  overwrite: false             # never overwrite a previous run directory
+  log_level: INFO
+  device: auto                 # auto | cpu | cuda | cuda:0 | mps
+  dtype: auto                  # auto | float32 | float16 | bfloat16
+  log_prompts: true            # set false to avoid storing raw user prompts
+  write_jsonl_per_example: true
+  deterministic_algorithms: true   # torch.use_deterministic_algorithms (CPU/CUDA)
+  save_debug_scores: false     # per-step score diagnostics (large)
+  git_hash: true
+
+model:
+  model_id: HuggingFaceTB/SmolLM2-135M-Instruct
+  revision: main               # pin to a commit hash for final results
+  tokenizer_id: null           # null -> same as model_id
+  tokenizer_revision: null
+  trust_remote_code: false
+  use_chat_template: true      # wrap prompts with the tokenizer chat template
+  add_generation_prompt: true
+  max_context_tokens: 1024     # hard cap for prompt+context; longer -> error
+  input_side_padding: left     # left is required for batched decoding
+  load_in_8bit: false          # needs bitsandbytes; unsupported -> clear error
+  attn_implementation: null    # null -> transformers default (sdpa/eager)
+  low_cpu_mem_usage: true
+
+decoding:
+  mode: factanchor             # baseline | factanchor
+  variant: contrastive_logprob # contrastive_logprob | logit_difference (ablation)
+  alpha: 0.5                   # contrast strength; 0.0 == baseline exactly
+  max_new_tokens: 64
+  min_new_tokens: 0
+  do_sample: false             # greedy first; sampling is opt-in
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 0
+  repetition_penalty: 1.0
+  no_repeat_ngram_size: 0
+  use_cache: true              # KV cache (tested against uncached path)
+  stop_sequences: []           # e.g. ["\n\n", "<|eot_id|>"]
+  include_prompt_in_output: false
+  adaptive_plausibility: false # ADAPTIVE PLAUSIBILITY (Li et al. 2023):
+  plausibility_epsilon: 0.1    # drop tokens below eps*max_p_base before argmax
+  normalize_scores: false      # softmax the contrastive scores before sampling
+  contrast_warmup_tokens: 0    # apply contrast only after k generated tokens
+  on_missing_contrast: skip_contrast  # skip_contrast | empty_block
+                               # What to do when FactAnchor is requested but no
+                               # contrast facts exist.  `skip_contrast` runs the
+                               # exact baseline path and flags the example as
+                               # degraded (never a silently distorted score).
+
+retrieval:
+  enabled: true
+  provider: wikidata           # wikidata | dbpedia | json_file | mock
+  source_name: null            # null -> derived from the provider (Wikidata/LocalJSON/...)
+                               # An explicit value is allowed for custom mirrors, but offline
+                               # providers must not be labelled as a real knowledge source.
+  max_entities: 3
+  max_facts_per_entity: 6
+  min_linking_confidence: 0.75 # below this the mention stays unlinked
+  min_fact_confidence: 0.4
+  allow_literal_values: true
+  include_qualifiers: true
+  max_value_chars: 160         # truncate absurdly long literal values
+  prefer_low_degree_properties: true
+  entity_context_hint_chars: 240  # local context passed to the linker
+  local_json_path: null        # for provider=json_file (offline experiments)
+  request_timeout_seconds: 10.0
+  max_retries: 3
+  rate_limit_per_second: 5.0
+  cache_dir: .cache/factanchor
+  cache_ttl_seconds: 2592000
+  fallback_on_unavailable: cache_only  # cache_only | no_facts | error
+  user_agent: null             # null -> built from env / default string
+
+ner:
+  backend: rule                # rule | simple | spacy (spacy needs the extra)
+  spacy_model: en_core_web_sm
+  max_entities: 3
+  min_mention_chars: 2
+  allow_single_token: true
+  stopword_tokens: []          # extra tokens to never treat as entities
+
+corruption:
+  strategy: object_swap        # object_swap | attribute_perturbation | entity_substitution | omission | none
+  corruption_rate: 0.5         # 0.0 <= rate <= 1.0, deterministic selection
+  seed: 42
+  max_corruption_fraction_of_block: 1.0  # explicit corruption_rate controls the selected fraction
+  swap_within_domain: true     # object swap only within the same domain/range
+  allow_cross_entity_substitution: false
+  preserve_qualifiers: true    # corrupted facts keep the original qualifiers
+  audit_log: true
+  extra_candidate_pool: {}     # {predicate_id: [candidate objects]} overrides
+
+context:
+  template_version: v1
+  base_template: |
+    {question}
+  # The fact block (header + one line per fact) is rendered by ContextBuilder and
+  # substituted for {fact_block}; the surrounding wording is identical in every
+  # comparable experiment (Section 9).
+  contrast_template: |-
+    User question:
+    {question}
+
+    {fact_block}
+  fact_line_format: "- {subject} | {predicate} | {object}"
+  trusted_facts_in_base: false # true => retrieval-augmented baseline (separate experiment!)
+  include_empty_fact_block: false  # keep the contrast skeleton even with 0 facts
+  max_fact_block_chars: 1200
+  label_as_experimental: true  # the wording above; flips in prompt ablations
+  system_prompt: null
+
+evaluation:
+  datasets: [wikibio_hallucination]
+  split: test
+  max_examples: 50             # dev subset size; final runs may raise this
+  development_subset: true
+  claim_extraction: rule       # rule | model
+  claim_judge: heuristic_lexical  # heuristic_lexical | model_judge | gold_reference
+  judge_model_id: null         # required for claim_judge=model_judge
+  judge_max_new_tokens: 128
+  judge_temperature: 0.0
+  bertscore_enabled: false     # requires `pip install -e .[bertscore]`
+  bertscore_model: roberta-large
+  bertscore_lang: en
+  bootstrap_samples: 1000
+  bootstrap_confidence: 0.95
+  manual_review_sample: 30
+
+logging_:
+  jsonl_buffer_size: 0
+  include_timestamps: true
+  redact_prompts: false        # true -> store sha256 of prompt instead of text
+  max_snippet_chars: 2000

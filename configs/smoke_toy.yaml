@@ -1,0 +1,57 @@
+# ===========================================================================
+# Fully offline quick-start configuration.
+# ---------------------------------------------------------------------------
+# * No network: knowledge comes from a local JSONL file, the model is the
+#   randomly-initialised toy transformer bundled with the package, so nothing
+#   is downloaded.
+# * Intended for smoke tests, CI and for verifying that the plumbing works.
+# * Results from this config are MEANINGLESS as science (random weights); they
+#   only prove the pipeline runs.  It is reported with run.is_toy_model=true.
+#
+#   python scripts/run_factanchor.py --config configs/smoke_toy.yaml \
+#       --prompt "Who was Marie Curie?" --json
+# ===========================================================================
+defaults: default.yaml
+
+run:
+  name: smoke_toy
+  seed: 42
+  device: cpu
+  dtype: float32
+  is_toy_model: true      # recorded in every generation record + metrics
+
+model:
+  model_id: toy
+  use_chat_template: false   # the toy tokenizer has no chat template
+  # The offline backend uses a byte-level tokenizer, so ~1 token per character;
+  # the fact block is capped by context.max_fact_block_chars below.
+  max_context_tokens: 1024
+  input_side_padding: right
+
+decoding:
+  mode: factanchor
+  alpha: 0.5
+  max_new_tokens: 24
+
+retrieval:
+  enabled: true
+  provider: json_file
+  local_json_path: data/processed/offline_knowledge.jsonl
+  max_entities: 2
+  max_facts_per_entity: 6
+  fallback_on_unavailable: error
+
+ner:
+  backend: rule
+
+corruption:
+  strategy: object_swap
+  corruption_rate: 0.5
+  seed: 42
+
+context:
+  trusted_facts_in_base: false
+
+evaluation:
+  datasets: [jsonl]
+  claim_judge: heuristic_lexical

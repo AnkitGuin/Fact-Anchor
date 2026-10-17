@@ -1,0 +1,103 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "factanchor"
+version = "0.1.0"
+description = "Entity-Grounded Contrastive Decoding for Real-Time Hallucination Suppression (research prototype)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "FactAnchor contributors" }]
+keywords = ["nlp", "factuality", "hallucination", "contrastive-decoding", "llm"]
+classifiers = [
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# Core runtime dependencies only.  Heavy/optional pieces live in extras so that
+# `pip install -e .` stays feasible on small machines and offline test runners.
+dependencies = [
+    "numpy>=1.24",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+# Model inference (required for real experiments; the offline "toy" backend does
+# not need it).
+hf = [
+    "torch>=2.2",
+    "transformers>=4.41",
+    "safetensors>=0.4",
+]
+# Notebook-free analysis + plotting.
+analysis = [
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+]
+# Dataset loaders (WikiBio, HaluEval, FEVER).
+datasets = [
+    "datasets>=2.18",
+]
+# Rule-based NER is the default; spaCy is optional.
+ner = [
+    "spacy>=3.6",
+]
+# Optional semantic metric (BERTScore).  NOTE: needs a model download.
+bertscore = [
+    "bert-score>=0.3.13",
+]
+# Streamlit demo.
+demo = [
+    "streamlit>=1.30",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-timeout>=2.2",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "scipy>=1.10",
+]
+all = [
+    "torch>=2.2",
+    "transformers>=4.41",
+    "safetensors>=0.4",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "datasets>=2.18",
+    "spacy>=3.6",
+    "streamlit>=1.30",
+]
+
+[project.scripts]
+factanchor = "factanchor.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+factanchor = ["data/*.yaml", "data/*.jsonl", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: tests that download models or datasets",
+    "network: tests that require network access (always skipped by default)",
+    "hf: tests that require torch + transformers",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]

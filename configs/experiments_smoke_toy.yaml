@@ -1,0 +1,109 @@
+# ===========================================================================
+# Offline ablation profile (Section 11.5 / Phase 6).
+# ---------------------------------------------------------------------------
+# Same structure as configs/experiments.yaml but pinned to the offline stack so
+# the whole grid runs on a laptop CPU without network access or model weights:
+#
+#   * model.model_id = "toy"     -> NumPy toy causal LM (randomly initialised)
+#   * retrieval.provider = json_file -> data/processed/offline_knowledge.jsonl
+#
+# The numbers it produces are PLUMBING CHECKS, not research results: a randomly
+# initialised model cannot be more or less factual. Use it to verify that every
+# condition runs, that records/audits are written, and that latency bookkeeping
+# works. Rerun with configs/experiments.yaml on real weights for scientific
+# conclusions.
+#
+# Run:
+#   python scripts/run_ablation.py --config configs/experiments_smoke_toy.yaml \
+#       --dataset data/processed/dev_smoke.jsonl --limit 4
+# ===========================================================================
+base: default.yaml
+
+knobs:
+  run.seed: 42
+  run.is_toy_model: true
+  model.model_id: toy
+  model.max_context_tokens: 1024
+  decoding.max_new_tokens: 24
+  decoding.do_sample: false          # greedy => deterministic, paired comparison
+  decoding.use_cache: true
+  retrieval.provider: json_file
+  retrieval.local_json_path: data/processed/offline_knowledge.jsonl
+  retrieval.source_name: null        # derived from the provider ("LocalJSON")
+  retrieval.max_entities: 2
+  retrieval.max_facts_per_entity: 6
+  retrieval.fallback_on_unavailable: no_facts
+  evaluation.claim_judge: heuristic_lexical
+  evaluation.max_examples: 4
+
+# alpha x corruption-rate grid (Section 11.5 conditions 5 and 6).
+grid:
+  decoding.alpha: [0.0, 0.5, 1.0]
+  corruption.corruption_rate: [0.0, 0.5, 1.0]
+
+# Named controls (conditions 1, 3, 4, 7 and the scoring/context variants).
+conditions:
+  - name: base_model_no_context
+    note: "Condition 1: baseline decoding, no retrieval, no contrast."
+    overrides:
+      decoding.mode: baseline
+      decoding.alpha: 0.0
+      retrieval.enabled: false
+      corruption.strategy: none
+      corruption.corruption_rate: 0.0
+
+  - name: factanchor_object_swap
+    note: "Condition 3: full FactAnchor with controlled object swap."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      corruption.strategy: object_swap
+      corruption.corruption_rate: 0.5
+
+  - name: factanchor_omission_control
+    note: "Condition 4: fact omission instead of false facts."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      corruption.strategy: omission
+      corruption.corruption_rate: 0.5
+
+  - name: trusted_facts_baseline
+    note: "Condition 7: retrieval-augmented baseline (trusted facts in the base prompt)."
+    overrides:
+      decoding.mode: baseline
+      decoding.alpha: 0.0
+      retrieval.enabled: true
+      context.trusted_facts_in_base: true
+      corruption.strategy: none
+      corruption.corruption_rate: 0.0
+
+  - name: logit_difference_ablation
+    note: "Scoring variant: logits - alpha*logits instead of log-probabilities."
+    overrides:
+      decoding.mode: factanchor
+      decoding.variant: logit_difference
+      decoding.alpha: 0.5
+      corruption.strategy: object_swap
+      corruption.corruption_rate: 0.5
+
+  - name: empty_contrast_control
+    note: "Contrast branch keeps an empty fact block (isolates the second forward pass)."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      decoding.on_missing_contrast: empty_block
+      retrieval.enabled: true
+      corruption.strategy: none
+      corruption.corruption_rate: 0.0
+      context.include_empty_fact_block: true
+
+  - name: amateur_model_ablation
+    note: "Amateur-model ablation: contrast branch decoded by a second toy model with different
+      random weights in the same byte-token space (toy-amateur)."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      decoding.amateur_model_id: toy-amateur
+      corruption.strategy: object_swap
+      corruption.corruption_rate: 0.5

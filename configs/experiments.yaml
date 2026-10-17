@@ -1,0 +1,105 @@
+# ===========================================================================
+# Ablation grid (Section 11.5 / Phase 6).
+# ---------------------------------------------------------------------------
+# Structure:
+#   base:   <path to a config used as the template for every condition>
+#   grid:   {field.path: [values]}  -> cartesian product becomes conditions
+#   conditions: explicit extra conditions (name + overrides) appended as-is
+#   knobs:  values applied to EVERY condition (e.g. shared seed/max_examples)
+#
+# Run:
+#   python scripts/run_ablation.py --config configs/experiments.yaml \
+#       --dataset data/processed/dev_smoke.jsonl --limit 5
+#
+# The runner refuses to re-use an existing run directory and writes one
+# generations.jsonl + metrics.json per condition under artifacts/runs/<run_id>/.
+# ===========================================================================
+base: default.yaml
+
+# Applied to all conditions (keeps comparisons paired and cheap).
+knobs:
+  run.seed: 42
+  run.log_prompts: true
+  model.model_id: HuggingFaceTB/SmolLM2-135M-Instruct
+  decoding.max_new_tokens: 48
+  decoding.do_sample: false          # greedy => deterministic, paired comparison
+  decoding.use_cache: true
+  retrieval.max_entities: 2
+  retrieval.max_facts_per_entity: 6
+  evaluation.max_examples: 25
+  evaluation.claim_judge: heuristic_lexical
+
+# Cartesian product of these lists forms the executed conditions.
+grid:
+  decoding.alpha: [0.0, 0.25, 0.5, 1.0]
+  corruption.corruption_rate: [0.0, 0.25, 0.5, 0.75]
+
+# Named conditions that must exist in addition to the grid (they are *not*
+# part of the cartesian product and are always run).
+conditions:
+  - name: base_model_no_context
+    note: "Condition 1: baseline decoding, no retrieval, no contrast."
+    overrides:
+      decoding.mode: baseline
+      decoding.alpha: 0.0
+      retrieval.enabled: false
+      corruption.strategy: none
+      corruption.corruption_rate: 0.0
+
+  - name: factanchor_object_swap
+    note: "Condition 3: full FactAnchor, controlled object swap."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      corruption.strategy: object_swap
+      corruption.corruption_rate: 0.5
+
+  - name: factanchor_omission_control
+    note: "Condition 4: fact omission instead of false facts (control)."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      corruption.strategy: omission
+      corruption.corruption_rate: 0.5
+
+  - name: trusted_facts_baseline
+    note: "Condition 7: retrieval-augmented baseline (trusted facts in base context)."
+    overrides:
+      decoding.mode: baseline
+      decoding.alpha: 0.0
+      retrieval.enabled: true
+      context.trusted_facts_in_base: true
+      corruption.strategy: none
+      corruption.corruption_rate: 0.0
+
+  - name: logit_difference_ablation
+    note: "Scoring ablation: logits - alpha*logits (not log-probabilities)."
+    overrides:
+      decoding.mode: factanchor
+      decoding.variant: logit_difference
+      decoding.alpha: 0.5
+      corruption.strategy: object_swap
+      corruption.corruption_rate: 0.5
+
+  - name: empty_contrast_control
+    note: "Contrast branch keeps an empty fact block (isolates the second forward pass cost)."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      decoding.on_missing_contrast: empty_block
+      retrieval.enabled: true
+      corruption.strategy: none
+      corruption.corruption_rate: 0.0
+      context.include_empty_fact_block: true
+
+  - name: amateur_model_ablation
+    note: "Amateur-model ablation (spec 3.3): the contrast distribution comes from a second,
+      genuinely weaker model instead of the base model. Set decoding.amateur_model_id to a
+      smaller checkpoint that shares the base model's tokenizer (cross-tokenizer contrast is
+      not implemented and raises). Marked infeasible until such a checkpoint is available."
+    overrides:
+      decoding.mode: factanchor
+      decoding.alpha: 0.5
+      decoding.amateur_model_id: null   # e.g. "HuggingFaceTB/SmolLM2-135M-Instruct"
+      corruption.strategy: object_swap
+      corruption.corruption_rate: 0.5
